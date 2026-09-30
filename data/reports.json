@@ -1,0 +1,26 @@
+[
+  {
+    "file": "sap-2024.pdf",
+    "company": "SAP",
+    "year": 2024,
+    "title": "Integrierter Bericht der SAP 2024",
+    "language": "de",
+    "url": "https://www.sap.com/docs/download/investors/2024/sap-2024-integrierter-bericht.pdf"
+  },
+  {
+    "file": "bmw-2024.pdf",
+    "company": "BMW",
+    "year": 2024,
+    "title": "BMW Group Bericht 2024",
+    "language": "de",
+    "url": "https://www.bmwgroup.com/de/bericht/2024/downloads/BMW-Group-Bericht-2024-de.pdf"
+  },
+  {
+    "file": "siemens-2024.pdf",
+    "company": "Siemens",
+    "year": 2024,
+    "title": "Siemens Annual Financial Report FY2024",
+    "language": "en",
+    "url": "https://assets.new.siemens.com/siemens/assets/api/uuid:ae46683e-14dd-4455-a882-09d4184457c7/Annual-Financial-Report-FY2024.pdf"
+  }
+]

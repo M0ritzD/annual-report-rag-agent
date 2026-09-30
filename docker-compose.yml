@@ -1,0 +1,24 @@
+# Komplett lokaler Stack: Ollama + API/Web-UI
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5:7b-instruct-q4_k_m
+#   docker compose exec ollama ollama pull bge-m3
+#   docker compose exec app uv run --no-sync arr index
+# Hinweis macOS: Ollama in Docker hat keinen GPU-Zugriff. Auf dem Mac besser
+# Ollama nativ starten und ARR_OLLAMA_BASE_URL=http://host.docker.internal:11434/v1 setzen.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+  app:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      ARR_OLLAMA_BASE_URL: http://ollama:11434/v1
+    volumes:
+      - ./data:/app/data
+    depends_on: [ollama]
+
+volumes:
+  ollama:

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Geschäftsbericht-Agent</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --card:#171a21; --muted:#8b93a7; --fg:#e7e9ee; --accent:#4f8cff; --border:#262b36; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:18px 28px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; }
+  header h1 { font-size:18px; margin:0; }
+  .badge { font-size:12px; color:var(--muted); border:1px solid var(--border); padding:3px 8px; border-radius:99px; }
+  main { max-width:980px; margin:0 auto; padding:24px; display:grid; gap:18px; }
+  .reports { display:flex; gap:8px; flex-wrap:wrap; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { cursor:pointer; background:var(--card); border:1px solid var(--border); color:var(--fg); border-radius:8px; padding:8px 12px; font-size:13px; }
+  .chip:hover { border-color:var(--accent); }
+  form { display:flex; gap:10px; }
+  textarea { flex:1; resize:vertical; min-height:52px; background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:12px; font:inherit; }
+  button.primary { background:var(--accent); color:white; border:0; border-radius:10px; padding:0 22px; font-weight:600; cursor:pointer; }
+  button.primary:disabled { opacity:.5; cursor:wait; }
+  .msg { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .msg.user { border-left:3px solid var(--accent); }
+  .meta { color:var(--muted); font-size:12px; margin-bottom:8px; }
+  .steps { font-family: ui-monospace, Menlo, monospace; font-size:12px; color:var(--muted); margin:8px 0; }
+  .answer table { border-collapse:collapse; margin:10px 0; } .answer td, .answer th { border:1px solid var(--border); padding:4px 10px; }
+  .cite { color:var(--accent); font-weight:600; cursor:help; }
+  details { margin-top:12px; } summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .src { font-size:13px; border-top:1px solid var(--border); padding:8px 0; }
+  .src b { color:var(--accent); } .src p { color:var(--muted); margin:4px 0 0; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Geschäftsbericht-Agent</h1>
+  <span class="badge" id="backend">…</span>
+  <div class="reports" id="reports"></div>
+</header>
+<main>
+  <div class="chips">
+    <button class="chip">Wie hoch war der Umsatz der SAP 2024 und wie stark ist er gewachsen?</button>
+    <button class="chip">Vergleiche den Free Cashflow von SAP, BMW und Siemens im Geschäftsjahr 2024.</button>
+    <button class="chip">Welche wesentlichen Risiken nennt BMW für das Geschäft mit Elektrofahrzeugen?</button>
+    <button class="chip">Wie viele Mitarbeitende hatte Siemens Ende des Geschäftsjahres 2024?</button>
+  </div>
+  <form id="f"><textarea id="q" placeholder="Frage zu den Geschäftsberichten…"></textarea><button class="primary" id="b">Fragen</button></form>
+  <div id="log" style="display:grid; gap:14px"></div>
+</main>
+<script>
+const log = document.getElementById('log'), q = document.getElementById('q'), b = document.getElementById('b');
+let history = [];
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+fetch('/api/health').then(r => r.json()).then(h => document.getElementById('backend').textContent = `LLM: ${h.llm} · Embeddings: ${h.embeddings} · Index: ${h.vector_store}`);
+fetch('/api/reports').then(r => r.json()).then(rs => document.getElementById('reports').innerHTML = rs.map(r => `<span class="badge">${esc(r.company)} ${r.year || ''}</span>`).join(''));
+document.querySelectorAll('.chip').forEach(c => c.onclick = () => { q.value = c.textContent; send(); });
+document.getElementById('f').onsubmit = e => { e.preventDefault(); send(); };
+q.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+async function send() {
+  const question = q.value.trim(); if (!question || b.disabled) return;
+  q.value = ''; b.disabled = true;
+  log.insertAdjacentHTML('afterbegin', `<div class="msg user">${esc(question)}</div>`);
+  const pending = document.createElement('div'); pending.className = 'msg'; pending.innerHTML = '<span class="meta">Agent recherchiert …</span>';
+  log.firstChild.after(pending);
+  try {
+    const r = await fetch('/api/ask', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question, history }) });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const a = await r.json();
+    const srcById = Object.fromEntries(a.sources.map(s => [s.ref, s]));
+    let html = marked.parse(a.answer).replace(/\[(\d+(?:\s*[,;]\s*\d+)*)\]/g, (m, g) =>
+      g.split(/[,;]/).map(n => { const s = srcById[+n.trim()]; return s ? `<span class="cite" title="${esc(s.company)} ${s.year}, S. ${s.page}">[${n.trim()}]</span>` : `[${n.trim()}]`; }).join(''));
+    pending.innerHTML = `<div class="meta">${esc(a.model)} · ${a.latency_s}s · ${a.steps.length} Werkzeugaufrufe</div>
+      <div class="steps">${a.steps.map(s => `🔧 ${esc(s.tool)}(${esc(JSON.stringify(s.arguments))})`).join('<br>')}</div>
+      <div class="answer">${html}</div>
+      ${a.sources.length ? `<details open><summary>Quellen (${a.sources.length})</summary>${a.sources.map(s => `<div class="src"><b>[${s.ref}]</b> ${esc(s.company)} ${s.year}, Seite ${s.page}${s.section ? ' – ' + esc(s.section) : ''}<p>${esc(s.snippet)}…</p></div>`).join('')}</details>` : ''}`;
+    history.push({role:'user', content:question}, {role:'assistant', content:a.answer}); history = history.slice(-8);
+  } catch (e) { pending.innerHTML = `<span style="color:#ff6b6b">Fehler: ${esc(String(e.message || e))}</span>`; }
+  b.disabled = false;
+}
+</script>
+</body>
+</html>

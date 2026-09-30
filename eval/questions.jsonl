@@ -1,0 +1,16 @@
+{"id": "sap-umsatz", "question": "Wie hoch waren die Umsatzerlöse der SAP im Jahr 2024 und um wie viel Prozent sind sie gewachsen?", "company": "SAP", "pages": [33, 69, 73, 76, 164, 270, 284, 307, 316, 384], "expected": ["34,2|34.176", "10 %|10%|10 prozent"]}
+{"id": "sap-cloud", "question": "Wie stark sind die Clouderlöse der SAP 2024 gewachsen und wie hoch waren sie?", "company": "SAP", "pages": [14, 33, 62, 69, 73, 77, 78, 124, 270, 284, 285, 307, 384], "expected": ["17,1|17.1|17,2|17.21", "25 %|25%|26 %|26%"]}
+{"id": "sap-fcf", "question": "Wie hoch war der Free Cashflow der SAP im Geschäftsjahr 2024?", "company": "SAP", "pages": [62, 67, 71, 74, 75, 88, 89, 346, 384], "expected": ["4,1|4.113"]}
+{"id": "sap-ccb", "question": "Wie hoch war der Current Cloud Backlog der SAP Ende 2024?", "company": "SAP", "pages": [73, 78, 317, 384], "expected": ["18,1|18.078"]}
+{"id": "sap-dividende", "question": "Welche Dividende je Aktie schlägt SAP für 2024 vor?", "company": "SAP", "pages": [8, 15, 85, 125, 332, 384], "expected": ["2,35"]}
+{"id": "sap-mitarbeitende", "question": "Wie viele Mitarbeitende beschäftigte SAP zum 31. Dezember 2024?", "company": "SAP", "pages": [52], "expected": ["109.000|109.973|109.121|109000|109973|109121"]}
+{"id": "bmw-umsatz", "question": "Wie hoch waren die Konzernumsatzerlöse der BMW Group 2024 und wie haben sie sich gegenüber dem Vorjahr verändert?", "company": "BMW", "pages": [11, 70, 71, 78, 156, 269, 289, 347, 348, 425], "expected": ["142.380|142,4", "8,4"]}
+{"id": "bmw-ebt", "question": "Wie hoch war das Konzernergebnis vor Steuern der BMW Group 2024?", "company": "BMW", "pages": [2, 9, 11, 69, 70, 72, 263, 269, 273, 292, 348, 425], "expected": ["10.971|10,97 mrd|11,0 mrd"]}
+{"id": "bmw-fcf", "question": "Wie hoch war der Free Cashflow im Segment Automobile der BMW Group 2024?", "company": "BMW", "pages": [10, 73, 74, 426], "expected": ["4.852|4,85 mrd|4,9 mrd"]}
+{"id": "bmw-auslieferungen", "question": "Wie viele Automobile hat die BMW Group 2024 ausgeliefert?", "company": "BMW", "pages": [2, 9, 12, 69, 79, 263, 425], "expected": ["2.450.854|2,45 mio|2,45 millionen"]}
+{"id": "bmw-mitarbeitende", "question": "Wie viele Mitarbeitende hatte die BMW Group am Jahresende 2024?", "company": "BMW", "pages": [2, 9, 69, 72, 411, 426], "expected": ["159.104"]}
+{"id": "bmw-dividende", "question": "Welche Dividende je Stammaktie schlägt BMW für 2024 vor?", "company": "BMW", "pages": [20, 37, 294, 306, 426], "expected": ["4,30|4,3 €"]}
+{"id": "siemens-umsatz", "question": "Wie hoch war der Umsatz von Siemens im Geschäftsjahr 2024?", "company": "Siemens", "pages": [14, 20, 40, 47, 83, 86, 147], "expected": ["75,9|75.9|75,93|75.930"]}
+{"id": "siemens-fcf", "question": "Wie hoch war der Free Cashflow von Siemens im Geschäftsjahr 2024?", "company": "Siemens", "pages": [16, 20, 45, 48, 61, 62, 72, 83, 127, 147], "expected": ["9,5|9.5"]}
+{"id": "siemens-mitarbeitende", "question": "Wie viele Mitarbeitende hatte Siemens zum 30. September 2024?", "company": "Siemens", "pages": [4], "expected": ["327.000|327,000|327000|327 000|327 tsd"]}
+{"id": "siemens-dividende", "question": "Welche Dividende je Aktie schlägt Siemens für das Geschäftsjahr 2024 vor?", "company": "Siemens", "pages": [5, 20, 32, 69, 70, 130, 147], "expected": ["5,20|5.20|5,2 €"]}
