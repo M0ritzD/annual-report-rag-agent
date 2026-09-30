@@ -110,7 +110,24 @@ Das Container-Image wird von GitHub Actions nach `ghcr.io` gebaut. Die App skali
 
 `uv run arr eval` fährt 16 Fragen aus [`eval/questions.jsonl`](eval/questions.jsonl), deren Soll-Antworten manuell in den PDFs verifiziert wurden (Umsatz, Free Cashflow, Mitarbeitende, Dividende, … je Unternehmen).
 
-<!-- EVAL_RESULTS -->
+**Ergebnis – komplett lokal** (`qwen2.5:7b-instruct-q4_k_m` + `bge-m3` auf einem MacBook Air M2, 16 GB):
+
+| Metrik | Wert |
+|---|---|
+| Retrieval-Trefferquote (Top 6) | **100 %** (16/16) |
+| Antwort-Genauigkeit | **81 %** (13/16) |
+| Zitierquote | 94 % |
+| Median-Latenz | 49 s (CPU/GPU-Limit eines 7B-Modells auf dem Laptop) |
+
+**Fehleranalyse:** Das Retrieval findet immer die richtige Seite. Die 3 Fehler passieren bei der Generierung durch das 7B-Modell:
+Bei den BMW-Auslieferungen nennt es die Zahl der Marke BMW statt der Gruppe (2,20 statt 2,45 Mio.), bei den BMW-Mitarbeitenden
+übernimmt es eine Fußnotenziffer in die Zahl („159.104**3**“), und beim Siemens-Umsatz verwechselt es Umsatz mit Auftragseingang.
+Das sind typische Schwächen kleiner Modelle bei dichten Kennzahlentabellen. Im Azure-Modus (`gpt-4o-mini`) bzw. mit einem
+größeren lokalen Modell (`qwen2.5:14b`) sollten diese Fehler seltener auftreten.
+
+Iterationen, die die Genauigkeit von 62,5 % auf 81 % gehoben haben: *Multi-Query-Fusion* (Suchanfrage des LLM + Originalfrage
+via RRF), ein DE↔EN-Glossar für die Query-Expansion (BM25 ist nicht mehrsprachig) und Prompt-Regeln zu Konzern- vs.
+Segmentwerten.
 
 Gemessen wird:
 - **Retrieval-Trefferquote** – ist eine Seite mit der gesuchten Kennzahl unter den Top-6-Treffern?
