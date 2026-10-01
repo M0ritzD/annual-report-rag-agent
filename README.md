@@ -38,6 +38,17 @@ $ arr ask "Wie hoch war der Free Cashflow der SAP 2024 und wie hat er sich zum V
 | ☁️ **Infrastructure as Code** | Komplette Azure-Umgebung als Bicep inkl. Managed Identity & RBAC – **keine API-Keys im Container**. |
 | ✅ **Evaluation & CI** | Fragenkatalog mit manuell verifizierten Kennzahlen, Metriken für Retrieval, Faktentreue, Zitate und Latenz; Unit-Tests ohne LLM in GitHub Actions. |
 
+### Was man fragen kann
+
+| Art der Frage | Beispiel |
+|---|---|
+| Kennzahl nachschlagen | „Wie hoch waren die Umsatzerlöse der SAP 2024?“ |
+| Unternehmen vergleichen | „Vergleiche den Free Cashflow von SAP, BMW und Siemens im Geschäftsjahr 2024.“ |
+| Inhaltliche Fragen | „Welche wesentlichen Risiken nennt BMW für das Geschäft mit Elektrofahrzeugen?“ |
+| Rechnen | „Um wie viel Prozent ist der Current Cloud Backlog der SAP gewachsen?“ |
+| Sprachübergreifend | Deutsche Frage → Treffer im englischen Siemens-Bericht („Mitarbeitende“ → *employees*) |
+| Nachfragen im Chat | `arr chat` bzw. die Web-UI behalten den Gesprächsverlauf („Und wie war es bei BMW?“) |
+
 ## Architektur
 
 ```mermaid
@@ -65,6 +76,81 @@ flowchart LR
 | **Lokal** | Ollama | Ollama | lokal | lokal | Entwicklung, vertrauliche Berichte, 0 € |
 | **Azure** | Azure OpenAI | Azure OpenAI | AI Search | Blob Storage | Produktiv, skalierbar, Managed Identity |
 | **Hybrid** | Ollama | Ollama | AI Search | Blob Storage | Zentrale Wissensbasis, Inferenz on-prem (DSGVO) |
+
+Möglich ist das, weil Ollama und Azure OpenAI dieselbe (OpenAI-kompatible) Schnittstelle anbieten – der Code ruft beide über
+das `openai`-SDK auf, nur die Client-Erzeugung unterscheidet sich ([`llm.py`](src/annual_report_rag/llm.py)).
+
+## So funktioniert es
+
+Das System arbeitet in zwei Phasen: **einmalig indexieren**, danach **pro Frage recherchieren und antworten**.
+
+### Phase 1 – Indexierung (`arr index`, einmalig)
+
+Ziel: Die PDFs in kleine, durchsuchbare Textstücke („Chunks“) zerlegen. Code: [`ingest.py`](src/annual_report_rag/ingest.py), [`indexer.py`](src/annual_report_rag/indexer.py).
+
+1. **Text extrahieren** – PyMuPDF liest jede Seite aus.
+2. **Bereinigen** – Geschäftsberichte wiederholen auf jeder Seite dieselbe Navigationsleiste
+   („An unsere Stakeholder | Konzernabschluss | …“). Zeilen, die auf mehr als 30 % aller Seiten vorkommen, werden als
+   Kopf-/Fußzeilen erkannt und entfernt; Seitenzahlen fallen weg, Silbentrennungen („Umsatz-⏎erlöse“) werden zusammengeführt.
+3. **Kapitel zuordnen** – Aus dem PDF-Inhaltsverzeichnis erhält jede Seite ihren Kapitelpfad,
+   z. B. *Zusammengefasster Konzernlagebericht → Steuerungssystem*. So kann die Antwort das Kapitel zitieren, und die Suche kennt den Kontext.
+4. **Chunking** – Der Text wird zeilen- und absatzbewusst in Stücke von ca. 1.200 Zeichen mit 200 Zeichen Überlappung
+   zerlegt, damit Sätze an den Grenzen nicht verloren gehen (SAP 1.348, BMW 1.751, Siemens 672 Chunks).
+5. **Embeddings** – `bge-m3` wandelt jeden Chunk (mit vorangestelltem Unternehmen und Kapitel) in einen Vektor mit
+   1.024 Dimensionen um. Texte mit ähnlicher Bedeutung liegen im Vektorraum nah beieinander – auch über Sprachgrenzen hinweg.
+6. **Speichern** – lokal als `chunks.jsonl` + `vectors.npy` (plus BM25-Index im Speicher) oder in Azure AI Search
+   (HNSW-Vektorfeld, deutscher Analyzer, Filterfelder für Unternehmen und Jahr).
+
+### Phase 2 – Eine Frage beantworten (`arr ask`, Web-UI, API)
+
+Der Agent ist ein **Tool-Calling-Loop**: Das LLM entscheidet selbst, welches Werkzeug es als Nächstes nutzt, bis es genug
+Informationen hat. Code: [`agent.py`](src/annual_report_rag/agent.py), [`tools.py`](src/annual_report_rag/tools.py).
+
+```mermaid
+sequenceDiagram
+    participant N as Nutzer
+    participant A as Agent
+    participant L as LLM
+    participant S as Hybride Suche
+    N->>A: „Vergleiche den Free Cashflow von SAP und BMW“
+    A->>L: Frage + Werkzeugliste
+    L->>A: search_reports(query="Free Cashflow", company="SAP")
+    A->>S: Vektor- + BM25-Suche, RRF
+    S-->>A: Top-6-Textstellen
+    A-->>L: [1]–[6] mit Unternehmen, Seite, Kapitel
+    L->>A: search_reports(query="Free Cashflow Automobile", company="BMW")
+    A-->>L: [7]–[12]
+    L->>A: calculate("4852 - 4113")
+    A-->>L: 739
+    L->>A: Antwort mit Zitaten [2] [8]
+    A->>N: Antwort + nur tatsächlich zitierte Quellen
+```
+
+1. **Planen** – Das LLM erhält die Frage, einen System-Prompt mit Regeln (immer zuerst suchen, jede Aussage belegen,
+   Konzern- vor Segmentwerten, nie im Kopf rechnen) und drei Werkzeuge:
+   - `search_reports(query, company?, year?)` – Suche in den Berichten, optional gefiltert
+   - `calculate(expression)` – exakte Arithmetik
+   - `list_reports()` – welche Unternehmen/Jahre sind indexiert?
+2. **Suchen** – jede Suche ist mehrstufig ([`vectorstore.py`](src/annual_report_rag/vectorstore.py), [`query.py`](src/annual_report_rag/query.py)):
+   - **Query-Expansion:** Ein DE↔EN-Finanzglossar ergänzt Fachbegriffe der anderen Sprache (BM25 ist nicht mehrsprachig).
+   - **Vektorsuche** findet bedeutungsähnliche Stellen („Wie profitabel war …“ → *Betriebsergebnis*).
+   - **BM25-Stichwortsuche** findet exakte Begriffe und Zahlen („EBT-Marge“, „4.113“) – entscheidend bei Kennzahlentabellen.
+   - **Reciprocal Rank Fusion** kombiniert beide Ranglisten: Was in beiden weit oben steht, gewinnt.
+   - **Multi-Query-Fusion:** Zusätzlich zur (oft knappen) Suchanfrage des LLM wird mit der Originalfrage gesucht und erneut fusioniert.
+3. **Quellen nummerieren** – Die sechs besten Chunks gehen als `[1]` … `[6]` mit Unternehmen, Seite und Kapitel an das LLM
+   zurück. Die Nummern bleiben über mehrere Suchen hinweg stabil.
+4. **Weiter recherchieren oder antworten** – Das LLM kann erneut suchen (z. B. für das nächste Unternehmen) oder rechnen
+   und schreibt dann die Antwort, in der jede Aussage mit `[n]` belegt ist.
+5. **Validieren** – Nur Quellen, die tatsächlich gefunden wurden, landen in der Ausgabe; erfundene Referenzen wie `[99]` werden verworfen.
+
+**Absicherungen für kleine lokale Modelle:**
+
+| Problem | Lösung |
+|---|---|
+| Modell antwortet aus dem Gedächtnis, ohne zu suchen | **Forced Retrieval:** Der Agent führt die Suche mit der Originalfrage selbst aus. |
+| Endlosschleife aus Tool-Calls | **Schrittlimit** (Standard 5): Danach wird eine Antwort ohne Werkzeuge erzwungen. |
+| Fehlerhafte Tool-Argumente (leere Filter, „alle“, kaputtes JSON) | Werden toleriert bzw. als Fehlermeldung an das LLM zurückgegeben, damit es sich korrigieren kann. |
+| Rechnen per `eval` wäre eine Sicherheitslücke | `calculate` parst den Ausdruck als AST und erlaubt nur Zahlen und Grundrechenarten – kein Code. |
 
 ## Schnellstart (lokal)
 
@@ -134,6 +220,17 @@ Gemessen wird:
 - **Antwort-Genauigkeit** – enthält die Antwort alle erwarteten Werte? (Zahlenformate wie `34.176`, `34,2 Mrd.` werden normalisiert)
 - **Zitierquote** – belegt die Antwort ihre Aussagen mit Quellen?
 
+## Grenzen
+
+- **Latenz lokal:** Ein 7B-Modell auf einem Laptop braucht ca. 30–60 s pro Antwort; in Azure mit `gpt-4o-mini` sind es wenige Sekunden.
+- **Tabellen:** PDF-Tabellen werden als Textzeilen extrahiert, nicht als strukturierte Tabellen. Bei dichten Kennzahlentabellen
+  ordnet ein kleines Modell Werte daher gelegentlich der falschen Zeile oder Spalte zu (siehe Fehleranalyse oben).
+- **Rechnen:** Das Modell nutzt `calculate` nicht immer zuverlässig und rundet dann selbst (z. B. 19,3 % statt 19,2 %).
+- **Keine Anlageberatung:** Die Antworten sind nur so gut wie die gefundenen Textstellen – die Quellenangaben sind dazu da, sie nachzuprüfen.
+
+**Mögliche Erweiterungen:** Tabellenextraktion als Markdown/DataFrame, Reranking mit einem Cross-Encoder, Berichte mehrerer
+Jahre für Zeitreihen, LLM-as-a-Judge-Evaluation, Streaming der Antwort in der Web-UI.
+
 ## Projektstruktur
 
 ```
@@ -141,6 +238,7 @@ src/annual_report_rag/
 ├── ingest.py        PDF → bereinigte, kapitelbewusste Chunks
 ├── llm.py           Chat- & Embedding-Clients (Ollama | Azure OpenAI, Entra ID)
 ├── vectorstore.py   Hybride Suche: lokal (NumPy + BM25 + RRF) | Azure AI Search
+├── query.py         Query-Expansion (DE↔EN-Finanzglossar)
 ├── storage.py       Dokumentquelle: lokal | Azure Blob Storage
 ├── indexer.py       Ingestion-Pipeline
 ├── tools.py         Agenten-Werkzeuge + sicherer Rechner
